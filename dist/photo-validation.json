@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "sample_photos": 6,
+  "fields_total": 42,
+  "recognized_correct": 42,
+  "missing_requires_manual_input": 0,
+  "recognized_incorrect": 0,
+  "lane_matches": 6,
+  "non_stat_screen_rejected": true,
+  "browser_qa": false,
+  "checked_at": "2026-10-18T00:45:52.857Z"
+}

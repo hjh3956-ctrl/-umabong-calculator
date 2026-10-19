@@ -1,0 +1,9 @@
+node_modules/
+.sites-runtime/
+.sites-local-state/
+*.traineddata
+tests/ocr-raw/
+dist/ocr/core/*.wasm.js
+dist/ocr/lang/*.gz
+dist/ocr/tesseract.esm.min.js
+dist/ocr/worker.min.js

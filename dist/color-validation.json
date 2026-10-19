@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "photos": 90,
+  "original_photos": 66,
+  "test_transformed_photos": 24,
+  "correct": 540,
+  "wrong": 0,
+  "missing": 0,
+  "lane_matches": 90,
+  "browser_qa": false,
+  "checked_at": "2026-10-18T00:45:48.633Z"
+}

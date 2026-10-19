@@ -1,0 +1,12 @@
+{
+  "model_version": "2026-10-18.1",
+  "passed": true,
+  "distribution_cases": 43,
+  "trace_cases": 100,
+  "complete_trace_logs": 11488,
+  "maximum_order_probability_error": 2.914335439641036e-16,
+  "worker_comparison_candidates": 1010,
+  "browser_qa": false,
+  "browser_qa_reason": "control-browser capability unavailable in managed environment",
+  "checked_at": "2026-10-19T00:43:20.076Z"
+}

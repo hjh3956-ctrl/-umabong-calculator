@@ -1,0 +1,49 @@
+import {formatAmount,parseAmount,MODEL_VERSION} from './engine.mjs';
+import {probabilityText as pct} from './strategy.mjs';
+const KEY='umabong-forecast-history-v2',esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function validateOrder(a){if(!Array.isArray(a)||a.length!==6||new Set(a).size!==6||a.some(x=>!Number.isInteger(x)||x<1||x>6))throw new Error('1~6번을 중복 없이 순서대로 선택하세요.');return a;}
+export function settleForecast(f,order,double){
+ validateOrder(order);const payout=[double?4:2,1.5,1,0,0,0];
+ return f.input.bank-f.input.stakes.reduce((a,b)=>a+b,0)+order.reduce((s,lane,rank)=>s+f.input.stakes[lane-1]*payout[rank],0);
+}
+export function validateHistoryImport(data){
+ if(data?.schema!=='umabong-history-v2'||!Array.isArray(data.records)||data.records.length>1000)throw new Error('기록 내보내기로 저장한 JSON을 선택하세요.');
+ for(const r of data.records){
+  const s=r?.input,rank=r?.rank_probabilities,q=r?.boost_probabilities;
+  if(typeof r?.id!=='string'||!/^[a-zA-Z0-9-]{1,80}$/.test(r.id)||!Number.isFinite(Date.parse(r.created_at))||!s||!Number.isFinite(s.bank)||s.bank<=0||!Array.isArray(s.stakes)||s.stakes.length!==6||s.stakes.some(x=>!Number.isFinite(x)||x<0)||s.stakes.reduce((a,b)=>a+b,0)>s.bank*(1+1e-12)||typeof s.double!=='boolean'||!Array.isArray(rank)||rank.length!==6||rank.some(a=>!Array.isArray(a)||a.length!==6||a.some(x=>!Number.isFinite(x)||x<0||x>1+1e-10)||Math.abs(a.reduce((a,b)=>a+b,0)-1)>1e-7)||!Array.isArray(q)||q.length!==6||q.some(x=>!Number.isFinite(x)||x<0||x>1)||!Number.isFinite(r.prediction?.expected_final)||!Number.isFinite(r.prediction?.loss_probability))throw new Error('기록의 금액·확률 형식을 확인하세요.');
+  if(r.actual){validateOrder(r.actual.order);if(typeof r.actual.double!=='boolean'||!Number.isFinite(r.actual.calculated_balance)||r.actual.observed_balance!==null&&(!Number.isFinite(r.actual.observed_balance)||r.actual.observed_balance<0)||!Array.isArray(r.actual.boosters)||r.actual.boosters.length!==6||r.actual.boosters.some(a=>!Array.isArray(a)||a.length!==3||a.some(x=>x!==null&&x!==0&&x!==1)))throw new Error('실제 결과의 형식을 확인하세요.');}
+ }
+ if(new Set(data.records.map(r=>r.id)).size!==data.records.length)throw new Error('중복 경기 ID가 있습니다.');
+ return data.records;
+}
+const get=()=>{try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[];}catch{return [];}};
+const put=a=>{try{localStorage.setItem(KEY,JSON.stringify(a));}catch{throw new Error('기기 저장 공간이 부족합니다. 기존 기록을 JSON으로 내보내 주세요.');}};
+function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+export function saveForecast(data){
+ if(!(data.result.invested>0))throw new Error('배분을 선택하고 다시 계산한 뒤 예측을 저장하세요.');
+ const row={id:globalThis.crypto?.randomUUID?.()||String(Date.now()),created_at:new Date().toISOString(),model_version:MODEL_VERSION,input:structuredClone(data.input),prediction:structuredClone(data.result),rank_probabilities:data.distribution.rank_probabilities,boost_probabilities:data.distribution.boost_probabilities,actual:null};
+ const a=get();a.unshift(row);put(a);return row;
+}
+export function renderHistory(root){
+ const rows=get(),done=rows.filter(x=>x.actual),topExpected=done.reduce((s,r)=>s+Math.max(...r.rank_probabilities.map(x=>x[0])),0),topHits=done.filter(r=>r.actual.order[0]===r.rank_probabilities.map(x=>x[0]).indexOf(Math.max(...r.rank_probabilities.map(x=>x[0])))+1).length;
+ const boost=new Map();for(const r of done)r.actual.boosters?.forEach((bits,i)=>bits.forEach(b=>{if(b===null)return;const q=r.boost_probabilities[i],x=boost.get(q)||{n:0,on:0};x.n++;x.on+=b;boost.set(q,x);}));
+ const comparable=done.filter(r=>r.input.double===r.actual.double),losses=comparable.filter(r=>(r.actual.observed_balance??r.actual.calculated_balance)<r.input.bank*(1-1e-10)).length,lossExpected=comparable.reduce((s,r)=>s+r.prediction.loss_probability,0);
+ const secondExpected=done.reduce((s,r)=>s+Math.max(...r.rank_probabilities.map(x=>x[1])),0),secondHits=done.filter(r=>r.actual.order[1]===r.rank_probabilities.map(x=>x[1]).indexOf(Math.max(...r.rank_probabilities.map(x=>x[1])))+1).length;
+ root.innerHTML=`<div class="section-heading"><div><p class="eyebrow">이 기기에만 저장</p><h2>예측과 실제 결과</h2></div><button class="secondary" id="historyExport">기록 내보내기</button></div><p class="muted">경기 전에 예측을 저장하고 결과가 나온 뒤 입력하세요. 원래 예측은 유지됩니다. 브라우저 데이터를 지우거나 기기를 바꾸면 기록이 사라질 수 있으니 내보내기를 이용하세요.</p>
+ <div class="history-stats"><span>저장 <b>${rows.length}경기</b></span><span>결과 입력 <b>${done.length}경기</b></span><span>우승 1순위 실제 우승 <b>${topHits}회</b> / 모델 기대 ${topExpected.toFixed(2)}회</span><span>2등 1순위 실제 2등 <b>${secondHits}회</b> / 모델 기대 ${secondExpected.toFixed(2)}회</span><span>동일 더블 조건 코인 감소 <b>${losses}회</b> / 모델 기대 ${lossExpected.toFixed(2)}회 (${comparable.length}경기)</span></div><p class="muted">실제 투자 조건에서 각 순위 확률이 가장 높은 번호를 평가합니다. 작은 표본의 적중 횟수만으로 확률 정확성을 확정하지 않습니다. 직접 확인한 잔액이 없으면 순위·배율로 계산한 값을 사용합니다.</p>
+ <label class="text-button history-import">저장한 기록 불러오기<input id="historyImport" type="file" accept="application/json,.json" hidden></label><p id="historyImportStatus" role="status" class="muted"></p>
+ <details><summary>입력한 부스트 관측 집계</summary><table class="compact-table"><thead><tr><th>모델 구간 발동률</th><th>발동 / 확인 구간</th><th>관측 비율</th></tr></thead><tbody>${[...boost].sort((a,b)=>a[0]-b[0]).map(([q,x])=>`<tr><td>${pct(q)}</td><td>${x.on} / ${x.n}</td><td>${pct(x.on/x.n)}</td></tr>`).join('')||'<tr><td colspan="3">확인한 부스트를 입력하면 집계됩니다.</td></tr>'}</tbody></table><p class="muted">미확인 구간은 실패로 세지 않습니다. 판독 가능한 구간만 모은 비율에는 관측 편향이 있을 수 있습니다.</p></details>
+ <div class="history-list">${rows.map(r=>`<article class="panel history-card"><div class="history-card-head"><strong>${esc(new Date(r.created_at).toLocaleString('ko-KR'))}</strong><span class="pill">${r.actual?'결과 기록됨':'결과 대기'}</span></div><p>${r.input.stakes.map((x,i)=>x>0?`${i+1}번 ${esc(formatAmount(x))}`:'').filter(Boolean).join(' · ')} · ${r.input.double?'더블 ON':'더블 OFF'}</p><p class="muted">사전 평균 잔액 ${esc(formatAmount(r.prediction.expected_final))} · 감소 ${pct(r.prediction.loss_probability)}</p>${r.actual?`<p><b>${r.actual.order.join(' → ')}</b></p><p>계산 회수액 ${esc(formatAmount(r.actual.calculated_balance))}${r.actual.observed_balance!==null?` · 직접 확인 잔액 ${esc(formatAmount(r.actual.observed_balance))}`:''}</p><p class="muted">결과 더블 ${r.actual.double?'ON':'OFF'}${r.actual.double!==r.input.double?' · 사전 설정과 달라 해당 예측의 지급 조건을 그대로 검증할 수 없습니다.':''}</p>`:resultForm(r)}<button class="text-button" data-export-record="${r.id}">이 경기 JSON</button></article>`).join('')||'<div class="empty-state"><strong>첫 경기 예측을 남겨보세요.</strong><p>계산 화면에서 배분을 선택한 다음 ‘경기 전 예측 저장’을 누르세요.</p></div>'}</div>`;
+ root.querySelector('#historyExport').addEventListener('click',()=>download({schema:'umabong-history-v2',records:rows},'umabong-history.json'));
+ root.querySelector('#historyImport').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>5e6)throw new Error('기록 파일은 5MB 이하로 선택하세요.');const incoming=validateHistoryImport(JSON.parse(await file.text())),current=get(),ids=new Set(current.map(r=>r.id)),added=incoming.filter(r=>!ids.has(r.id));put([...current,...added].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)));renderHistory(root);root.querySelector('#historyImportStatus').textContent=`${added.length}개를 추가했습니다. 기존 예측과 결과는 덮어쓰지 않았습니다.`;}catch(error){root.querySelector('#historyImportStatus').textContent=error.message;}});
+ root.querySelectorAll('[data-export-record]').forEach(el=>el.addEventListener('click',()=>download(rows.find(x=>x.id===el.dataset.exportRecord),'umabong-race.json')));
+ root.querySelectorAll('[data-result-form]').forEach(form=>form.addEventListener('submit',e=>{
+  e.preventDefault();const message=form.querySelector('[data-form-message]');
+  try{const a=get(),row=a.find(x=>x.id===form.dataset.resultForm);if(!row||row.actual)throw new Error('이미 결과가 기록됐거나 예측을 찾을 수 없습니다.');const order=validateOrder([...form.querySelectorAll('[data-order]')].map(x=>Number(x.value))),double=form.querySelector('[name=actualDouble]').checked,raw=form.querySelector('[name=actualBalance]').value.trim();
+   let observed=null;if(raw){observed=parseAmount(raw);}
+   const boosters=Array.from({length:6},(_,i)=>Array.from({length:3},(_,j)=>{const v=form.querySelector(`[data-boost="${i},${j}"]`).value;return v===''?null:Number(v);}));
+   row.actual={recorded_at:new Date().toISOString(),order,double,observed_balance:observed,calculated_balance:settleForecast(row,order,double),boosters};put(a);renderHistory(root);
+  }catch(error){message.textContent=error.message;}
+ }));
+}
+function resultForm(r){return `<form data-result-form="${r.id}"><p>실제 도착 순위</p><div class="order-inputs">${Array.from({length:6},(_,i)=>`<label>${i+1}등<select data-order="${i}" required><option value="">번호</option>${Array.from({length:6},(_,j)=>`<option value="${j+1}">${j+1}번</option>`).join('')}</select></label>`).join('')}</div><label class="check"><input type="checkbox" name="actualDouble" ${r.input.double?'checked':''}>실제 경기 더블 적용</label><label>직접 확인한 경기 후 잔액 · 선택<input name="actualBalance" inputmode="decimal" placeholder="예: 11.3B 또는 11300000"></label><details><summary>구간별 부스트 기록 · 확인한 것만</summary><p class="muted">영상 자동 분석 기능은 아닙니다. 확실히 확인한 구간만 입력하세요.</p>${Array.from({length:6},(_,i)=>`<div class="boost-entry"><strong>${i+1}번</strong>${['초반','중반','후반'].map((s,j)=>`<label>${s}<select data-boost="${i},${j}"><option value="">모름</option><option value="1">발동</option><option value="0">미발동</option></select></label>`).join('')}</div>`).join('')}</details><button class="primary" type="submit">실제 결과 저장</button><p data-form-message class="negative" role="status"></p></form>`;}

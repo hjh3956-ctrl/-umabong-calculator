@@ -1,0 +1,5 @@
+Browser OCR runtime: Tesseract.js 6.0.1 and its pinned tesseract.js-core dependency.
+Copyright notices are retained in LICENSE-tesseract.txt, core/LICENSE and the bundled worker license files.
+Korean and English trained data: @tesseract.js-data/kor 1.0.0 and @tesseract.js-data/eng 1.0.0,
+distributed by naptha/tessdata. Package metadata declares MIT.
+Sources: https://github.com/naptha/tesseract.js and https://github.com/naptha/tessdata

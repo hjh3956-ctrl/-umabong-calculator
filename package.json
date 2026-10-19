@@ -1,0 +1,16 @@
+{
+  "name": "umabong-strategy-calculator",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "test:ocr-fixtures": "node tests/validate-photos.mjs",
+    "prepare:ocr": "node scripts/prepare-ocr-assets.mjs"
+  },
+  "dependencies": {
+    "tesseract.js": "6.0.1",
+    "@tesseract.js-data/kor": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0"
+  }
+}
